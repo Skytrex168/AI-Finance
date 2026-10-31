@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: finance
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./database/sample_data.sql:/docker-entrypoint-initdb.d/02_sample_data.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d finance"]
+      interval: 5s
+      retries: 10
+
+  ai-service:
+    build: ./ai-service
+    environment:
+      AI_INTERNAL_KEY: ${AI_INTERNAL_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-claude-sonnet-4-5}
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/finance
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      AI_SERVICE_URL: http://ai-service:8000
+      AI_INTERNAL_KEY: ${AI_INTERNAL_KEY}
+      SEED_DEMO: ${SEED_DEMO:-true}
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on: [backend]
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  pgdata:

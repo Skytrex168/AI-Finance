@@ -1,0 +1,7 @@
+.env
+target/
+build/
+.dart_tool/
+__pycache__/
+*.pyc
+.idea/
